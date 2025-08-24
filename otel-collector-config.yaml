@@ -8,7 +8,7 @@ receivers:
   prometheus:
     config:
       global:
-        scrape_interval: 60s
+        scrape_interval: 30s
       scrape_configs:
         - job_name: otel-collector
           static_configs:
@@ -16,17 +16,14 @@ receivers:
               - localhost:8888
             labels:
               job_name: otel-collector
-  docker_stats:
-    endpoint: unix:///var/run/docker.sock
-    collection_interval: 120s
-    timeout: 90s
-    excluded_images:
-      - "pause:*"
-      - "*:latest"
-      - "k8s.gcr.io/*"
-    container_labels_to_metric_labels:
-      io.compose.project: compose_project
-      io.compose.service: compose_service
+        - job_name: cadvisor
+          static_configs:
+          - targets:
+              - cadvisor:8080
+            labels:
+              job_name: cadvisor
+# Removed docker_stats receiver due to context timeout issues
+  # Will use cAdvisor + Prometheus receiver instead
   postgresql:
     endpoint: host.docker.internal:5432
     transport: tcp
@@ -171,10 +168,7 @@ service:
       receivers: [prometheus]
       processors: [batch]
       exporters: [clickhousemetricswrite/prometheus, signozclickhousemetrics]
-    metrics/docker:
-      receivers: [docker_stats]
-      processors: [resource/docker, batch/docker]
-      exporters: [clickhousemetricswrite, signozclickhousemetrics]
+# Docker metrics now collected via cAdvisor + Prometheus receiver
     metrics/postgresql:
       receivers: [postgresql]
       processors: [resource/postgresql, batch]
