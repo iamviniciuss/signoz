@@ -18,12 +18,55 @@ receivers:
               job_name: otel-collector
   docker_stats:
     endpoint: unix:///var/run/docker.sock
-    collection_interval: 30s
-    timeout: 20s
-    api_version: 1.22
+    collection_interval: 120s
+    timeout: 90s
+    excluded_images:
+      - "pause:*"
+      - "*:latest"
+      - "k8s.gcr.io/*"
     container_labels_to_metric_labels:
       io.compose.project: compose_project
       io.compose.service: compose_service
+  postgresql:
+    endpoint: host.docker.internal:5432
+    transport: tcp
+    username: postgres
+    password: postgres
+    databases:
+      - trends_api
+    collection_interval: 30s
+    initial_delay: 10s
+    tls:
+      insecure: true
+    metrics:
+      postgresql.bgwriter.buffers.allocated:
+        enabled: true
+      postgresql.blocks_read:
+        enabled: true
+      postgresql.commits:
+        enabled: true
+      postgresql.rollbacks:
+        enabled: true
+      postgresql.database.count:
+        enabled: true
+      postgresql.database.locks:
+        enabled: true
+      postgresql.backends:
+        enabled: true
+      postgresql.operations:
+        enabled: true
+      postgresql.connection.max:
+        enabled: true
+      postgresql.replication.data_delay:
+        enabled: true
+      postgresql.table.size:
+        enabled: true
+      postgresql.table.vacuum.count:
+        enabled: true
+      postgresql.index.scans:
+        enabled: true
+      postgresql.index.size:
+        enabled: true
 processors:
   batch:
     send_batch_size: 10000
@@ -44,6 +87,17 @@ processors:
         action: upsert
       - key: deployment.environment
         value: local
+        action: upsert
+  resource/postgresql:
+    attributes:
+      - key: service.name
+        value: postgresql
+        action: upsert
+      - key: deployment.environment
+        value: local
+        action: upsert
+      - key: service.version
+        value: "15"
         action: upsert
   signozspanmetrics/delta:
     metrics_exporter: clickhousemetricswrite, signozclickhousemetrics
@@ -120,6 +174,10 @@ service:
     metrics/docker:
       receivers: [docker_stats]
       processors: [resource/docker, batch/docker]
+      exporters: [clickhousemetricswrite, signozclickhousemetrics]
+    metrics/postgresql:
+      receivers: [postgresql]
+      processors: [resource/postgresql, batch]
       exporters: [clickhousemetricswrite, signozclickhousemetrics]
     logs:
       receivers: [otlp]
