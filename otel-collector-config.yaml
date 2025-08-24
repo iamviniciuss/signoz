@@ -16,15 +16,35 @@ receivers:
               - localhost:8888
             labels:
               job_name: otel-collector
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 30s
+    timeout: 20s
+    api_version: 1.22
+    container_labels_to_metric_labels:
+      io.compose.project: compose_project
+      io.compose.service: compose_service
 processors:
   batch:
     send_batch_size: 10000
     send_batch_max_size: 11000
     timeout: 10s
+  batch/docker:
+    send_batch_size: 1000
+    send_batch_max_size: 1500
+    timeout: 30s
   resourcedetection:
     # Using OTEL_RESOURCE_ATTRIBUTES envvar, env detector adds custom labels.
     detectors: [env, system]
     timeout: 2s
+  resource/docker:
+    attributes:
+      - key: service.name
+        value: docker-containers
+        action: upsert
+      - key: deployment.environment
+        value: local
+        action: upsert
   signozspanmetrics/delta:
     metrics_exporter: clickhousemetricswrite, signozclickhousemetrics
     metrics_flush_interval: 60s
@@ -97,6 +117,10 @@ service:
       receivers: [prometheus]
       processors: [batch]
       exporters: [clickhousemetricswrite/prometheus, signozclickhousemetrics]
+    metrics/docker:
+      receivers: [docker_stats]
+      processors: [resource/docker, batch/docker]
+      exporters: [clickhousemetricswrite, signozclickhousemetrics]
     logs:
       receivers: [otlp]
       processors: [batch]
